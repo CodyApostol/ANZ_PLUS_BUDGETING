@@ -16,6 +16,7 @@ for key, default in {
     "df_avg": None,          # frequency_count_avg result
     "df_total": None,        # frequency_count result
     "num_months": 0,
+    "chat_history": [],      # list of {role, content} dicts for Ask AI page
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -59,7 +60,7 @@ with st.sidebar:
     st.title("💰 Budget Dashboard")
     st.markdown("---")
 
-    page = st.radio("Navigate", ["Home", "Past Spendings", "Budgeting Goals", "Future Predictions"])
+    page = st.radio("Navigate", ["Home", "Past Spendings", "Budgeting Goals", "Future Predictions", "Ask AI"])
 
     st.markdown("---")
     st.subheader("📂 Upload Statements")
@@ -225,3 +226,78 @@ elif page == "Future Predictions":
                 "Forecast is a simple rolling average. The more months of data you upload, "
                 "the more accurate it becomes."
             )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ASK AI
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "Ask AI":
+    import anthropic
+    import json
+
+    st.title("Ask AI")
+
+    if st.session_state.df_all is None:
+        st.warning("No data yet — upload statements on the sidebar first.")
+    else:
+        # ── Build a spending summary to inject as context ──────────────────────
+        df_total = st.session_state.df_total.copy()
+        df_avg   = st.session_state.df_avg.copy()
+
+        total_row   = df_total[df_total["Store"] == "TOTAL"]
+        total_spent = total_row["Total Spent ($)"].values[0] if not total_row.empty else 0
+        top_stores  = df_total[df_total["Store"] != "TOTAL"].head(10).to_dict(orient="records")
+        avg_stores  = df_avg[df_avg["Store"] != "TOTAL"].head(10).to_dict(orient="records")
+
+        income       = st.session_state.monthly_income
+        goal_pct     = st.session_state.goal_percent
+        allowed      = income * (1 - goal_pct / 100) if income > 0 else None
+        num_months   = st.session_state.num_months
+
+        system_prompt = f"""You are a personal finance assistant. The user has uploaded {num_months} month(s) of bank statements.
+Here is a summary of their spending data:
+
+Total spent across all months: ${total_spent:,.2f}
+
+Top stores by total spend:
+{json.dumps(top_stores, indent=2)}
+
+Monthly averages by store:
+{json.dumps(avg_stores, indent=2)}
+
+Monthly income: {"$" + f"{income:,}" if income > 0 else "not set"}
+Savings goal: {goal_pct}%
+Monthly spend budget: {"$" + f"{allowed:,.2f}" if allowed is not None else "not set"}
+
+Answer questions about their spending honestly and concisely. Give specific numbers from their data wherever possible.
+If they ask something you don't have data for, say so clearly."""
+
+        # ── Render chat history ────────────────────────────────────────────────
+        for msg in st.session_state.chat_history:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+
+        # ── Chat input ─────────────────────────────────────────────────────────
+        if prompt := st.chat_input("Ask anything about your spending..."):
+            st.session_state.chat_history.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.write(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    client = anthropic.Anthropic()
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=1000,
+                        system=system_prompt,
+                        messages=st.session_state.chat_history
+                    )
+                    reply = response.content[0].text
+
+                st.write(reply)
+                st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+        if st.session_state.chat_history:
+            if st.button("Clear chat"):
+                st.session_state.chat_history = []
+                st.rerun()
