@@ -1,4 +1,4 @@
 streamlit
 pandas
 pdfplumber
-google-generativeai
+google-genai
