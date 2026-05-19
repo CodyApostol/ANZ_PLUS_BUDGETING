@@ -286,9 +286,6 @@ If they ask something you don't have data for, say so clearly."""
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-                    models = client.models.list()
-                    st.write([m.name for m in models])
-                    st.stop()
 
                     # Build contents list: system prompt + full history
                     contents = [{"role": "user", "parts": [{"text": system_prompt}]},
@@ -300,7 +297,7 @@ If they ask something you don't have data for, say so clearly."""
                         })
                     try:
                         response = client.models.generate_content(
-                            model="gemini-1.5-flash-latest",
+                            model="gemini-2.0-flash-lite,
                             contents=contents
                         )
                         reply = response.text
