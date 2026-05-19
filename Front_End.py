@@ -57,7 +57,7 @@ def reprocess(uploaded_files):
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("💰 Budget Dashboard")
+    st.title("Budget Dashboard")
     st.markdown("---")
 
     page = st.radio("Navigate", ["Home", "Past Spendings", "Budgeting Goals", "Future Predictions", "Ask AI"])
@@ -232,10 +232,10 @@ elif page == "Future Predictions":
 # ASK AI
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Ask AI":
-    import anthropic
+    import google.generativeai as genai
     import json
 
-    st.title("Ask AI")
+    st.title("Chatbot")
 
     if st.session_state.df_all is None:
         st.warning("No data yet — upload statements on the sidebar first.")
@@ -285,14 +285,20 @@ If they ask something you don't have data for, say so clearly."""
 
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    client = anthropic.Anthropic()
-                    response = client.messages.create(
-                        model="claude-sonnet-4-20250514",
-                        max_tokens=1000,
-                        system=system_prompt,
-                        messages=st.session_state.chat_history
+                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-flash",
+                        system_instruction=system_prompt
                     )
-                    reply = response.content[0].text
+                    gemini_history = []
+                    for msg in st.session_state.chat_history[:-1]:
+                        gemini_history.append({
+                            "role": "user" if msg["role"] == "user" else "model",
+                            "parts": [msg["content"]]
+                        })
+                    chat = model.start_chat(history=gemini_history)
+                    response = chat.send_message(prompt)
+                    reply = response.text
 
                 st.write(reply)
                 st.session_state.chat_history.append({"role": "assistant", "content": reply})
