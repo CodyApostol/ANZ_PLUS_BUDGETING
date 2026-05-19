@@ -57,7 +57,7 @@ def reprocess(uploaded_files):
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("Budget Dashboard")
+    st.title("💰 Budget Dashboard")
     st.markdown("---")
 
     page = st.radio("Navigate", ["Home", "Past Spendings", "Budgeting Goals", "Future Predictions", "Ask AI"])
@@ -232,10 +232,10 @@ elif page == "Future Predictions":
 # ASK AI
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Ask AI":
-    import google.generativeai as genai
+    from google import genai
     import json
 
-    st.title("Chatbot")
+    st.title("Ask AI")
 
     if st.session_state.df_all is None:
         st.warning("No data yet — upload statements on the sidebar first.")
@@ -285,19 +285,21 @@ If they ask something you don't have data for, say so clearly."""
 
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                    model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash",
-                        system_instruction=system_prompt
-                    )
-                    gemini_history = []
-                    for msg in st.session_state.chat_history[:-1]:
-                        gemini_history.append({
+                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+
+                    # Build contents list: system prompt + full history
+                    contents = [{"role": "user", "parts": [{"text": system_prompt}]},
+                                {"role": "model", "parts": [{"text": "Got it, I'm ready to help."}]}]
+                    for msg in st.session_state.chat_history:
+                        contents.append({
                             "role": "user" if msg["role"] == "user" else "model",
-                            "parts": [msg["content"]]
+                            "parts": [{"text": msg["content"]}]
                         })
-                    chat = model.start_chat(history=gemini_history)
-                    response = chat.send_message(prompt)
+
+                    response = client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=contents
+                    )
                     reply = response.text
 
                 st.write(reply)
