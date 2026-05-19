@@ -295,12 +295,15 @@ If they ask something you don't have data for, say so clearly."""
                             "role": "user" if msg["role"] == "user" else "model",
                             "parts": [{"text": msg["content"]}]
                         })
-
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=contents
-                    )
-                    reply = response.text
+                    try:
+                        response = client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=contents
+                        )
+                        reply = response.text
+                    except Exception as e:
+                        st.error(f"Gemini error: {e}")
+                        st.stop()
 
                 st.write(reply)
                 st.session_state.chat_history.append({"role": "assistant", "content": reply})
