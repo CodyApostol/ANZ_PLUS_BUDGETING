@@ -186,7 +186,7 @@ elif page == "Budgeting Goals":
             return f"color: {color}"
 
         styled = main_df[["Store", "Avg Spent ($)", "Recommended ($)", "Difference ($)"]]\
-            .style.applymap(colour_diff, subset=["Difference ($)"])
+            .style.map(colour_diff, subset=["Difference ($)"])
 
         st.dataframe(styled, use_container_width=True, hide_index=True)
         st.bar_chart(main_df.set_index("Store")[["Avg Spent ($)", "Recommended ($)"]])
