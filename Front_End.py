@@ -232,19 +232,32 @@ elif page == "Future Predictions":
 # ASK AI
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Ask AI":
-    from google import genai
     import json
+    try:
+        from llama_cpp import Llama
+    except ImportError:
+        Llama = None
 
     st.title("Ask AI")
 
     if st.session_state.df_all is None:
         st.warning("No data yet — upload statements on the sidebar first.")
     else:
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
+        model_path = st.text_input(
+            "Local GGML model path",
+            value="models/ggml-model.bin",
+            help="Provide the path to a local llama/ggml model file, e.g. a small Llama 2 or Alpaca GGML model.",
+        )
+
+        if Llama is None:
             st.error(
-                "Gemini API key is missing. Please add `GEMINI_API_KEY` to Streamlit secrets to use Ask AI."
+                "Local Ask AI requires `llama-cpp-python`. Install it with `pip install llama-cpp-python`."
             )
+            st.info("If you don't want to install it yet, the rest of the app still works normally.")
+            st.stop()
+
+        if not model_path:
+            st.warning("Enter the local model path to enable Ask AI.")
             st.stop()
 
         # ── Build a spending summary to inject as context ──────────────────────
@@ -292,13 +305,9 @@ If they ask something you don't have data for, say so clearly."""
 
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    client = genai.Client(api_key=api_key)
-
-                    # Build a standard Gemini chat history:
-                    # - First: system prompt as a single user part in its own message
-                    # - Then: replay the conversation turns in order
-                    contents = [
-                        {"role": "user", "parts": [{"text": system_prompt}]}
+                    conversation = [
+                        system_prompt,
+                        "\nConversation history:\n",
                     ]
                     for msg in st.session_state.chat_history:
                         contents.append({
@@ -307,22 +316,15 @@ If they ask something you don't have data for, say so clearly."""
                         })
 
                     try:
-                        response = client.models.generate_content(
-                            model="gemini-2.0-flash-lite",
-                            contents=contents
+                        llm = Llama(model_path=model_path)
+                        response = llm.create(
+                            prompt=prompt_text,
+                            max_tokens=256,
+                            temperature=0.7,
                         )
-                        reply = getattr(response, "text", None) or "(No text returned by the model.)"
+                        reply = getattr(response, "choices", [{}])[0].get("text", "(No response returned by model.)")
                     except Exception as e:
-                        error_text = str(e)
-                        if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
-                            st.error(
-                                "Gemini quota exceeded. Check your Google Cloud billing and API quota, then try again later."
-                            )
-                        else:
-                            st.error(f"Gemini error: {error_text}")
-
-                        if "retry" in error_text.lower():
-                            st.info("Retry after a short time once quota resets.")
+                        st.error(f"Local model error: {e}")
                         st.stop()
 
                 st.write(reply)
