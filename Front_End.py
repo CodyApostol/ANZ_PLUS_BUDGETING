@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import io
-from parser import parse_statement
+from parsing import parse_statement
 from frequency import frequency_count_avg, frequency_count
 
 # ── Page config ────────────────────────────────────────────────────────────────
@@ -287,20 +287,24 @@ If they ask something you don't have data for, say so clearly."""
                 with st.spinner("Thinking..."):
                     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-                    # Build contents list: system prompt + full history
-                    contents = [{"role": "user", "parts": [{"text": system_prompt}]},
-                                {"role": "model", "parts": [{"text": "Got it, I'm ready to help."}]}]
+                    # Build a standard Gemini chat history:
+                    # - First: system prompt as a single user part in its own message
+                    # - Then: replay the conversation turns in order
+                    contents = [
+                        {"role": "user", "parts": [{"text": system_prompt}]}
+                    ]
                     for msg in st.session_state.chat_history:
                         contents.append({
                             "role": "user" if msg["role"] == "user" else "model",
                             "parts": [{"text": msg["content"]}]
                         })
+
                     try:
                         response = client.models.generate_content(
                             model="gemini-2.0-flash-lite",
                             contents=contents
                         )
-                        reply = response.text
+                        reply = getattr(response, "text", None) or "(No text returned by the model.)"
                     except Exception as e:
                         st.error(f"Gemini error: {e}")
                         st.stop()
