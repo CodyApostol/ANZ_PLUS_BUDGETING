@@ -240,19 +240,26 @@ elif page == "Ask AI":
     if st.session_state.df_all is None:
         st.warning("No data yet — upload statements on the sidebar first.")
     else:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            st.error(
+                "Gemini API key is missing. Please add `GEMINI_API_KEY` to Streamlit secrets to use Ask AI."
+            )
+            st.stop()
+
         # ── Build a spending summary to inject as context ──────────────────────
         df_total = st.session_state.df_total.copy()
-        df_avg   = st.session_state.df_avg.copy()
+        df_avg = st.session_state.df_avg.copy()
 
-        total_row   = df_total[df_total["Store"] == "TOTAL"]
+        total_row = df_total[df_total["Store"] == "TOTAL"]
         total_spent = total_row["Total Spent ($)"].values[0] if not total_row.empty else 0
-        top_stores  = df_total[df_total["Store"] != "TOTAL"].head(10).to_dict(orient="records")
-        avg_stores  = df_avg[df_avg["Store"] != "TOTAL"].head(10).to_dict(orient="records")
+        top_stores = df_total[df_total["Store"] != "TOTAL"].head(10).to_dict(orient="records")
+        avg_stores = df_avg[df_avg["Store"] != "TOTAL"].head(10).to_dict(orient="records")
 
-        income       = st.session_state.monthly_income
-        goal_pct     = st.session_state.goal_percent
-        allowed      = income * (1 - goal_pct / 100) if income > 0 else None
-        num_months   = st.session_state.num_months
+        income = st.session_state.monthly_income
+        goal_pct = st.session_state.goal_percent
+        allowed = income * (1 - goal_pct / 100) if income > 0 else None
+        num_months = st.session_state.num_months
 
         system_prompt = f"""You are a personal finance assistant. The user has uploaded {num_months} month(s) of bank statements.
 Here is a summary of their spending data:
@@ -272,7 +279,7 @@ Monthly spend budget: {"$" + f"{allowed:,.2f}" if allowed is not None else "not 
 Answer questions about their spending honestly and concisely. Give specific numbers from their data wherever possible.
 If they ask something you don't have data for, say so clearly."""
 
-        # ── Render chat history ────────────────────────────────────────────────
+        # ── Render chat history ──────────────────────────────────────────────
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
@@ -285,7 +292,7 @@ If they ask something you don't have data for, say so clearly."""
 
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    client = genai.Client(api_key=api_key)
 
                     # Build a standard Gemini chat history:
                     # - First: system prompt as a single user part in its own message
@@ -306,7 +313,16 @@ If they ask something you don't have data for, say so clearly."""
                         )
                         reply = getattr(response, "text", None) or "(No text returned by the model.)"
                     except Exception as e:
-                        st.error(f"Gemini error: {e}")
+                        error_text = str(e)
+                        if "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+                            st.error(
+                                "Gemini quota exceeded. Check your Google Cloud billing and API quota, then try again later."
+                            )
+                        else:
+                            st.error(f"Gemini error: {error_text}")
+
+                        if "retry" in error_text.lower():
+                            st.info("Retry after a short time once quota resets.")
                         st.stop()
 
                 st.write(reply)
